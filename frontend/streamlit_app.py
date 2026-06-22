@@ -7,13 +7,31 @@ from typing import Any
 import requests
 import streamlit as st
 
-API_URL = os.getenv("TEAMPULSE_API_URL", "http://127.0.0.1:8002/api/v1")
+
+def _config(key: str, default: str = "") -> str:
+    """Read configuration from the environment first, then Streamlit secrets.
+
+    This lets the same code run on Niteshift (env vars) and on Streamlit
+    Community Cloud (which exposes values via st.secrets, not os.environ).
+    """
+    value = os.getenv(key)
+    if value is not None:
+        return value
+    try:
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
+API_URL = _config("TEAMPULSE_API_URL", "http://127.0.0.1:8002/api/v1")
 
 # Which panel this Streamlit instance serves: "user" or "admin".
-# One codebase, two deployments — selected via the PANEL env var.
+# One codebase, two deployments — selected via the PANEL flag (env or secret).
 # (The Community panel was retired from active deployment; any other value
 # falls back to the User Panel so a stale PANEL=community never serves.)
-PANEL = os.getenv("PANEL", "user").strip().lower()
+PANEL = _config("PANEL", "user").strip().lower()
 if PANEL not in {"user", "admin"}:
     PANEL = "user"
 

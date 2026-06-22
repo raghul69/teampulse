@@ -22,7 +22,21 @@ class Settings(BaseSettings):
     SUPABASE_AUTH_VERIFY_TIMEOUT_SECONDS: int = 5
     REQUIRE_EMAIL_VERIFICATION: bool = True
 
+    # Comma-separated list of browser origins allowed to call the API (CORS).
+    # In production set this to the deployed Streamlit panel URLs, e.g.
+    #   "https://teampulse-user.streamlit.app,https://teampulse-admin.streamlit.app"
+    # Defaults to "*" for local dev. Note: the Streamlit server calls the API
+    # server-side, so CORS mainly matters for browser tools like /docs "Try it out".
+    ALLOWED_ORIGINS: str = Field(default="*")
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        value = self.ALLOWED_ORIGINS.strip()
+        if value == "*" or not value:
+            return ["*"]
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
 @lru_cache
