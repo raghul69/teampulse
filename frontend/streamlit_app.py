@@ -145,8 +145,8 @@ def panel_pages(role: str) -> list[str]:
         ]
     # PANEL == "user": employee + manager self-service pages.
     if role == "manager":
-        return ["Team Leave Requests", "Team Members", "Team Leave Calendar"]
-    return ["Apply Leave", "Leave Balance", "Leave History", "Notifications"]
+        return ["Team Leave Requests", "Team Members", "Team Leave Calendar", "Team Trend Insights"]
+    return ["Apply Leave", "Leave Balance", "Leave History", "Notifications", "AI Assistant"]
 
 
 def page_shell() -> str | None:
@@ -455,6 +455,25 @@ def employee_notifications() -> None:
                 st.rerun()
 
 
+def employee_ai_assistant() -> None:
+    st.header("AI Assistant")
+    st.info("🚧 Coming Soon")
+    st.write(
+        "AI leave recommendations and an assistant for balance, status, and policy "
+        "questions are planned. The underlying rule-based engine exists in the backend "
+        "(`backend/ai.py`); the chat experience is not wired up yet."
+    )
+
+
+def manager_trend_insights() -> None:
+    st.header("Team Trend Insights")
+    st.info("🚧 Coming Soon")
+    st.write(
+        "AI-assisted team leave trend insights (seasonality, approval patterns, coverage "
+        "risk) are planned. Until then, use Team Leave Requests and the Team Leave Calendar."
+    )
+
+
 def main() -> None:
     if not require_login():
         return
@@ -489,6 +508,10 @@ def main() -> None:
             employee_history()
         elif page == "Notifications":
             employee_notifications()
+        elif page == "AI Assistant":
+            employee_ai_assistant()
+        elif page == "Team Trend Insights":
+            manager_trend_insights()
     except RuntimeError as exc:
         st.error(str(exc))
 
