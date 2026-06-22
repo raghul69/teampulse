@@ -9,7 +9,19 @@ import streamlit as st
 
 API_URL = os.getenv("TEAMPULSE_API_URL", "http://127.0.0.1:8002/api/v1")
 
-st.set_page_config(page_title="TeamPulse Admin", page_icon="TP", layout="wide")
+# Which panel this Streamlit instance serves: "user", "admin", or "community".
+# One codebase, three deployments — selected via the PANEL env var.
+PANEL = os.getenv("PANEL", "user").strip().lower()
+if PANEL not in {"user", "admin", "community"}:
+    PANEL = "user"
+
+PANEL_META = {
+    "user": {"label": "User Panel", "roles": {"employee", "manager"}},
+    "admin": {"label": "Admin Panel", "roles": {"admin"}},
+    "community": {"label": "Community", "roles": {"employee", "manager", "admin"}},
+}
+
+st.set_page_config(page_title=f"TeamPulse {PANEL_META[PANEL]['label']}", page_icon="TP", layout="wide")
 
 
 def session() -> dict[str, Any]:
@@ -68,8 +80,8 @@ def require_login() -> bool:
 
 
 def login_page() -> None:
-    st.title("TeamPulse")
-    st.caption("Free Streamlit admin panel with Supabase Auth")
+    st.title(f"TeamPulse · {PANEL_META[PANEL]['label']}")
+    st.caption("Sign in with your Supabase Auth credentials")
 
     login_tab, reset_tab, verify_tab = st.tabs(["Login", "Password Reset", "Email Verification"])
 
@@ -119,16 +131,10 @@ def logout() -> None:
     st.rerun()
 
 
-def page_shell() -> str:
-    current_user = user()
-    st.sidebar.markdown("### TeamPulse")
-    st.sidebar.caption(f"{current_user.get('full_name', 'User')} · {current_user.get('role', '').title()}")
-    if st.sidebar.button("Logout", use_container_width=True):
-        logout()
-
-    role = current_user["role"]
-    if role == "admin":
-        pages = [
+def panel_pages(role: str) -> list[str]:
+    """Pages available for the given role within the current PANEL."""
+    if PANEL == "admin":
+        return [
             "Reports Summary",
             "User Management",
             "Department Management",
@@ -136,11 +142,34 @@ def page_shell() -> str:
             "All Leave Requests",
             "Audit Logs",
         ]
-    elif role == "manager":
-        pages = ["Team Leave Requests", "Team Members", "Team Leave Calendar"]
-    else:
-        pages = ["Apply Leave", "Leave Balance", "Leave History", "Notifications"]
+    if PANEL == "community":
+        # Admins get the management view; everyone reads the feed.
+        return ["Announcements"]
+    # PANEL == "user": employee + manager self-service pages.
+    if role == "manager":
+        return ["Team Leave Requests", "Team Members", "Team Leave Calendar"]
+    return ["Apply Leave", "Leave Balance", "Leave History", "Notifications"]
 
+
+def page_shell() -> str | None:
+    current_user = user()
+    role = current_user.get("role", "")
+    label = PANEL_META[PANEL]["label"]
+
+    st.sidebar.markdown(f"### TeamPulse · {label}")
+    st.sidebar.caption(f"{current_user.get('full_name', 'User')} · {role.title()}")
+    if st.sidebar.button("Logout", use_container_width=True):
+        logout()
+
+    # Enforce panel access by role. A user with the wrong role for this panel is
+    # authenticated but not authorized here (the backend enforces this too).
+    if role not in PANEL_META[PANEL]["roles"]:
+        allowed = ", ".join(sorted(PANEL_META[PANEL]["roles"]))
+        st.error(f"Your role ({role or 'unknown'}) cannot access the {label}.")
+        st.info(f"This panel is for: {allowed}. Use the panel that matches your role.")
+        return None
+
+    pages = panel_pages(role)
     return st.sidebar.radio("Dashboard", pages, label_visibility="collapsed")
 
 
@@ -428,11 +457,83 @@ def employee_notifications() -> None:
                 st.rerun()
 
 
+def community_announcements() -> None:
+    st.header("Company Announcements")
+    is_admin = user().get("role") == "admin"
+
+    if is_admin:
+        with st.expander("Create announcement", expanded=False):
+            with st.form("create_announcement"):
+                title = st.text_input("Title")
+                content = st.text_area("Content")
+                is_active = st.checkbox("Active (visible to everyone)", value=True)
+                submitted = st.form_submit_button("Publish", use_container_width=True)
+            if submitted:
+                if not title.strip() or not content.strip():
+                    st.error("Title and content are required.")
+                else:
+                    try:
+                        api("POST", "/announcements", json={"title": title, "content": content, "is_active": is_active})
+                        st.success("Announcement published.")
+                        st.rerun()
+                    except RuntimeError as exc:
+                        st.error(str(exc))
+
+    announcements = api("GET", "/announcements")
+    if not announcements:
+        st.info("No announcements yet.")
+        return
+
+    for item in announcements:
+        with st.container(border=True):
+            status = "" if item["is_active"] else " · 🔕 Inactive"
+            st.markdown(f"#### {item['title']}{status}")
+            st.write(item["content"])
+            author = item.get("author_name") or f"User {item['author_id']}"
+            st.caption(f"By {author} · {item['created_at'][:10]}")
+
+            if is_admin:
+                with st.expander("Manage", expanded=False):
+                    with st.form(f"edit_announcement_{item['id']}"):
+                        new_title = st.text_input("Title", value=item["title"], key=f"t_{item['id']}")
+                        new_content = st.text_area("Content", value=item["content"], key=f"c_{item['id']}")
+                        new_active = st.checkbox("Active", value=item["is_active"], key=f"a_{item['id']}")
+                        save = st.form_submit_button("Save changes", use_container_width=True)
+                    if save:
+                        try:
+                            api(
+                                "PATCH",
+                                f"/announcements/{item['id']}",
+                                json={"title": new_title, "content": new_content, "is_active": new_active},
+                            )
+                            st.success("Announcement updated.")
+                            st.rerun()
+                        except RuntimeError as exc:
+                            st.error(str(exc))
+
+                    toggle_label = "Deactivate" if item["is_active"] else "Reactivate"
+                    deactivate, delete = st.columns(2)
+                    if deactivate.button(toggle_label, key=f"toggle_{item['id']}", use_container_width=True):
+                        try:
+                            api("PATCH", f"/announcements/{item['id']}", json={"is_active": not item["is_active"]})
+                            st.rerun()
+                        except RuntimeError as exc:
+                            st.error(str(exc))
+                    if delete.button("Delete", key=f"del_{item['id']}", use_container_width=True):
+                        try:
+                            api("DELETE", f"/announcements/{item['id']}")
+                            st.rerun()
+                        except RuntimeError as exc:
+                            st.error(str(exc))
+
+
 def main() -> None:
     if not require_login():
         return
 
     page = page_shell()
+    if page is None:
+        return
     try:
         if page == "Reports Summary":
             admin_reports()
@@ -460,6 +561,8 @@ def main() -> None:
             employee_history()
         elif page == "Notifications":
             employee_notifications()
+        elif page == "Announcements":
+            community_announcements()
     except RuntimeError as exc:
         st.error(str(exc))
 
