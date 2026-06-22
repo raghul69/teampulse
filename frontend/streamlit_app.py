@@ -132,6 +132,7 @@ def page_shell() -> str:
             "Reports Summary",
             "User Management",
             "Department Management",
+            "Leave Policy Setup",
             "Leave Balance Management",
             "All Leave Requests",
             "Audit Logs",
@@ -139,7 +140,7 @@ def page_shell() -> str:
     elif role == "manager":
         pages = ["Team Leave Requests", "Team Members", "Team Leave Calendar"]
     else:
-        pages = ["Apply Leave", "Leave Balance", "Leave History", "Notifications"]
+        pages = ["Apply Leave", "Leave Balance", "Leave History", "Notifications", "AI Assistant"]
 
     return st.sidebar.radio("Dashboard", pages, label_visibility="collapsed")
 
@@ -153,6 +154,7 @@ def metrics_row(items: list[tuple[str, Any]]) -> None:
 def admin_reports() -> None:
     st.header("Reports Summary")
     summary = api("GET", "/reports/summary")
+    insights = api("GET", "/ai/insights")
     metrics_row(
         [
             ("Total Requests", summary["total_requests"]),
@@ -163,6 +165,9 @@ def admin_reports() -> None:
     )
     st.caption(f"Popular leave type: {summary['popular_leave_type'].title()} · Generated {summary['generated_on']}")
     st.bar_chart(summary.get("monthly_days", {}))
+    st.subheader("AI Insights")
+    st.info(insights.get("forecast_note", "No forecast available."))
+    st.dataframe([insights], use_container_width=True, hide_index=True)
 
 
 def admin_users() -> None:
@@ -262,6 +267,102 @@ def admin_departments() -> None:
                     st.error(str(exc))
 
 
+def admin_policies() -> None:
+    st.header("Leave Policy Setup")
+    types_tab, policies_tab, holidays_tab = st.tabs(["Leave Types", "Policies", "Holidays"])
+
+    with types_tab:
+        leave_types = api("GET", "/policies/leave-types")
+        st.dataframe(leave_types, use_container_width=True, hide_index=True)
+        with st.form("create_leave_type"):
+            code = st.selectbox("Code", ["casual", "sick", "earned", "unpaid"])
+            name = st.text_input("Name")
+            description = st.text_area("Description")
+            is_paid = st.checkbox("Paid leave", value=True)
+            requires_balance = st.checkbox("Requires balance", value=True)
+            max_days = st.number_input("Max days per request", min_value=0, value=0, step=1)
+            submitted = st.form_submit_button("Create / Update Type", use_container_width=True)
+        if submitted:
+            payload = {
+                "code": code,
+                "name": name or code.title(),
+                "description": description or None,
+                "is_paid": is_paid,
+                "requires_balance": requires_balance,
+                "requires_approval": True,
+                "max_days_per_request": max_days or None,
+                "is_active": True,
+            }
+            try:
+                existing_codes = {item["code"] for item in leave_types}
+                if code in existing_codes:
+                    api("PATCH", f"/policies/leave-types/{code}", json=payload)
+                else:
+                    api("POST", "/policies/leave-types", json=payload)
+                st.success("Leave type saved.")
+                st.rerun()
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+    with policies_tab:
+        policies = api("GET", "/policies/leave-policies")
+        st.dataframe(policies, use_container_width=True, hide_index=True)
+        with st.form("create_leave_policy"):
+            leave_type_code = st.selectbox("Leave type", ["casual", "sick", "earned", "unpaid"])
+            role = st.selectbox("Role scope", ["", "employee", "manager", "admin"])
+            department_id = st.number_input("Department ID scope", min_value=0, step=1)
+            annual_allowance = st.number_input("Annual allowance", min_value=0, value=12, step=1)
+            min_notice_days = st.number_input("Minimum notice days", min_value=0, value=0, step=1)
+            carry_forward_allowed = st.checkbox("Carry forward allowed")
+            max_carry_forward = st.number_input("Max carry forward", min_value=0, value=0, step=1)
+            submitted = st.form_submit_button("Add Policy", use_container_width=True)
+        if submitted:
+            try:
+                api(
+                    "POST",
+                    "/policies/leave-policies",
+                    json={
+                        "leave_type_code": leave_type_code,
+                        "department_id": department_id or None,
+                        "role": role or None,
+                        "annual_allowance": annual_allowance,
+                        "min_notice_days": min_notice_days,
+                        "carry_forward_allowed": carry_forward_allowed,
+                        "max_carry_forward": max_carry_forward,
+                    },
+                )
+                st.success("Leave policy added.")
+                st.rerun()
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+    with holidays_tab:
+        holidays = api("GET", "/policies/holidays")
+        st.dataframe(holidays, use_container_width=True, hide_index=True)
+        with st.form("create_holiday"):
+            name = st.text_input("Holiday name")
+            holiday_date = st.date_input("Holiday date")
+            department_id = st.number_input("Department ID", min_value=0, step=1)
+            is_optional = st.checkbox("Optional holiday")
+            submitted = st.form_submit_button("Add Holiday", use_container_width=True)
+        if submitted:
+            try:
+                api(
+                    "POST",
+                    "/policies/holidays",
+                    json={
+                        "name": name,
+                        "holiday_date": holiday_date.isoformat(),
+                        "department_id": department_id or None,
+                        "is_optional": is_optional,
+                    },
+                )
+                st.success("Holiday added.")
+                st.rerun()
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+
 def admin_balances() -> None:
     st.header("Leave Balance Management")
     balances = api("GET", "/leave-balances")
@@ -340,6 +441,17 @@ def manager_requests() -> None:
                         st.warning(warning)
             except RuntimeError as exc:
                 st.error(str(exc))
+            try:
+                balance = api("GET", f"/leave-balances/users/{item['employee_id']}")
+                metrics_row(
+                    [
+                        ("Casual Available", balance["casual_available"]),
+                        ("Sick Available", balance["sick_available"]),
+                        ("Earned Available", balance["earned_available"]),
+                    ]
+                )
+            except RuntimeError as exc:
+                st.warning(f"Balance unavailable: {exc}")
 
             comment = st.text_input("Manager comment", key=f"comment_{item['id']}")
             approve, reject = st.columns(2)
@@ -347,6 +459,9 @@ def manager_requests() -> None:
                 api("PATCH", f"/leave-requests/{item['id']}/decision", json={"status": "approved", "manager_comment": comment})
                 st.rerun()
             if reject.button("Reject", key=f"reject_{item['id']}", use_container_width=True):
+                if not comment:
+                    st.warning("Add a rejection reason before rejecting.")
+                    st.stop()
                 api("PATCH", f"/leave-requests/{item['id']}/decision", json={"status": "rejected", "manager_comment": comment})
                 st.rerun()
 
@@ -363,12 +478,17 @@ def manager_calendar() -> None:
     st.header("Team Leave Calendar")
     calendar = api("GET", "/leave-requests/calendar")
     st.dataframe(calendar, use_container_width=True, hide_index=True)
+    insights = api("GET", "/ai/insights")
+    st.subheader("Team Trend Insight")
+    st.info(insights.get("forecast_note", "No trend data yet."))
 
 
 def employee_apply_leave() -> None:
     st.header("Apply Leave")
+    leave_types = [item for item in api("GET", "/policies/leave-types") if item.get("is_active")]
+    options = [item["code"] for item in leave_types] or ["casual", "sick", "earned", "unpaid"]
     with st.form("apply_leave"):
-        leave_type = st.selectbox("Leave Type", ["casual", "sick", "earned", "unpaid"])
+        leave_type = st.selectbox("Leave Type", options)
         start_date = st.date_input("Start Date", min_value=date.today())
         end_date = st.date_input("End Date", min_value=start_date)
         reason = st.text_area("Reason")
@@ -376,6 +496,12 @@ def employee_apply_leave() -> None:
         submitted = st.form_submit_button("Submit Leave Request", use_container_width=True)
     if submitted:
         try:
+            if reason:
+                recommendation = api("POST", "/ai/recommend-leave", json={"reason": reason})
+                st.info(
+                    f"AI recommendation: {recommendation['recommended_type'].title()} "
+                    f"({recommendation['confidence']} confidence). {recommendation['message']}"
+                )
             api(
                 "POST",
                 "/leave-requests",
@@ -428,6 +554,17 @@ def employee_notifications() -> None:
                 st.rerun()
 
 
+def employee_ai_assistant() -> None:
+    st.header("AI Assistant")
+    question = st.text_input("Ask about leave balance, policy, or request status")
+    if st.button("Ask", use_container_width=True):
+        try:
+            answer = api("POST", "/ai/assistant", json={"question": question})
+            st.success(answer["answer"])
+        except RuntimeError as exc:
+            st.error(str(exc))
+
+
 def main() -> None:
     if not require_login():
         return
@@ -440,6 +577,8 @@ def main() -> None:
             admin_users()
         elif page == "Department Management":
             admin_departments()
+        elif page == "Leave Policy Setup":
+            admin_policies()
         elif page == "Leave Balance Management":
             admin_balances()
         elif page == "All Leave Requests":
@@ -460,6 +599,8 @@ def main() -> None:
             employee_history()
         elif page == "Notifications":
             employee_notifications()
+        elif page == "AI Assistant":
+            employee_ai_assistant()
     except RuntimeError as exc:
         st.error(str(exc))
 

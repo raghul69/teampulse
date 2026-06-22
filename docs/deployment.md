@@ -42,6 +42,8 @@ TEAMPULSE_API_URL="https://your-backend-domain.example.com/api/v1"
 5. Create Auth users.
 6. Map each Auth user to `public.users.auth_user_id`.
 7. Confirm roles in `public.users.role`.
+8. Confirm `leave_types`, `leave_policies`, and `holidays` are present.
+9. Configure yearly employee leave balances before live use.
 
 ## FastAPI Backend
 
@@ -118,8 +120,23 @@ Avoid `allow_origins=["*"]` in production if credentials or sensitive browser fl
 5. Log in as Manager.
 6. Log in as Employee.
 7. Submit a leave request as Employee.
-8. Approve/reject it as Manager.
-9. Verify notifications.
-10. Verify audit logs.
-11. Verify reports summary.
-12. Let an access token expire or force a `401` and confirm refresh-token retry works.
+8. Confirm duplicate/overlapping employee requests are blocked.
+9. Confirm insufficient paid balance requests are blocked.
+10. Approve/reject it as Manager and verify balance-before-approval.
+11. Verify notifications.
+12. Verify audit logs.
+13. Verify reports summary and AI insights.
+14. Ask the AI assistant about balance, policy, and request status.
+15. Let an access token expire or force a `401` and confirm refresh-token retry works.
+
+## Production Leave Setup
+
+In the Streamlit Admin dashboard:
+
+1. Create departments.
+2. Create manager and employee profiles mapped to Supabase Auth users.
+3. Assign each employee to a manager.
+4. Review the default leave types: casual, sick, earned, unpaid.
+5. Add leave policies for allowances, notice periods, and carry-forward rules.
+6. Add company holidays and department holidays.
+7. Create current-year leave balances for all employees.
