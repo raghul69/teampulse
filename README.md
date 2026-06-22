@@ -16,8 +16,13 @@ Authentication is handled by Supabase Auth. TeamPulse roles and profile data are
 - Supabase session refresh through refresh tokens
 - Role-based dashboards for Admin, Manager, and Employee
 - Admin user, department, leave balance, leave request, audit log, and report pages
+- Admin leave type, leave policy, and holiday setup pages
 - Manager team request approval/rejection, conflict warnings, team members, and team calendar
-- Employee leave application, balance, history/status, and notifications
+- Manager employee balance review before approval
+- Employee leave application, balance, history/status, notifications, and AI assistant
+- Leave balance deduction after approval
+- Duplicate/overlapping employee request prevention
+- AI leave recommendation, conflict signals, trend insights, and leave Q&A assistant
 - FastAPI API docs through OpenAPI
 
 ## Tech Stack
@@ -130,6 +135,9 @@ TeamPulse currently needs these Supabase PostgreSQL tables:
 - `public.leave_requests`
 - `public.notifications`
 - `public.audit_logs`
+- `public.leave_types`
+- `public.leave_policies`
+- `public.holidays`
 
 Attendance and task tables are not part of the current leave-management scope.
 
@@ -149,6 +157,36 @@ values (
 ```
 
 Then sign in from the Streamlit panel with that Supabase Auth email/password.
+
+## Create Managers And Employees
+
+1. Create the user in Supabase Auth.
+2. In Streamlit, sign in as Admin.
+3. Open `User Management`.
+4. Create the TeamPulse profile with the Supabase `auth.users.id`.
+5. Set `role` to `manager` or `employee`.
+6. For employees, set `manager_id` to their manager profile ID.
+7. Set `department_id` when department reporting is needed.
+
+## Configure Leave Management
+
+1. Open `Leave Policy Setup` as Admin.
+2. Confirm leave types exist for `casual`, `sick`, `earned`, and `unpaid`.
+3. Add or update policies for annual allowance, notice days, and carry-forward rules.
+4. Add holidays for company-wide or department-specific calendars.
+5. Open `Leave Balance Management`.
+6. Create yearly balances for each employee.
+
+## Test Full Workflow
+
+1. Log in as Employee and open `Apply Leave`.
+2. Enter reason, dates, and leave type. TeamPulse shows an AI leave recommendation before submitting.
+3. Confirm invalid ranges, insufficient balance, and duplicate overlapping requests are rejected.
+4. Log in as Manager and open `Team Leave Requests`.
+5. Review conflict warnings and employee balance.
+6. Approve or reject the request. Rejections require a reason.
+7. Log in as Employee and check status, balance, and notifications.
+8. Log in as Admin and review all requests, reports, audit logs, and AI insights.
 
 ## Run Backend
 
@@ -226,20 +264,25 @@ git push -u origin main
 
 ## Deployment Notes
 
-Recommended free/low-cost deployment:
+Recommended production stack:
 
-- Supabase for PostgreSQL and Auth
-- Render or Railway for FastAPI
-- Streamlit Community Cloud or Render for the Streamlit frontend
+- **Supabase** for PostgreSQL and Auth
+- **Railway** for the FastAPI backend
+- **Streamlit Community Cloud** for the two Streamlit panels (User + Admin)
 
 Production requirements:
 
 - Set all production environment variables in the hosting provider.
-- Configure CORS for the deployed Streamlit URL.
-- Keep Supabase service-role keys server-only.
-- Verify `GET /api/v1/health` after deploy.
+- Configure backend CORS via `ALLOWED_ORIGINS` (comma-separated Streamlit URLs).
+- Keep Supabase service-role keys server-only (Railway, never Streamlit).
+- Use the Railway backend URL as `TEAMPULSE_API_URL` for both Streamlit panels.
+- Verify `GET /api/v1/health` and `/docs` after deploy.
 - Test Admin, Manager, and Employee login flows after deploy.
 
-Detailed deployment guide: [docs/deployment.md](docs/deployment.md)
+**Production deployment guide (Railway + Streamlit Cloud + Supabase):**
+[docs/railway-streamlit-deployment.md](docs/railway-streamlit-deployment.md) — step-by-step
+backend/panel setup, the exact environment-variable list, and the final production checklist.
+
+General/legacy deployment notes: [docs/deployment.md](docs/deployment.md)
 
 Production checklist: [docs/production-checklist.md](docs/production-checklist.md)
