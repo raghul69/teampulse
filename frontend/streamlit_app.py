@@ -7,9 +7,40 @@ from typing import Any
 import requests
 import streamlit as st
 
-API_URL = os.getenv("TEAMPULSE_API_URL", "http://127.0.0.1:8002/api/v1")
 
-st.set_page_config(page_title="TeamPulse Admin", page_icon="TP", layout="wide")
+def _config(key: str, default: str = "") -> str:
+    """Read configuration from the environment first, then Streamlit secrets.
+
+    This lets the same code run on Niteshift (env vars) and on Streamlit
+    Community Cloud (which exposes values via st.secrets, not os.environ).
+    """
+    value = os.getenv(key)
+    if value is not None:
+        return value
+    try:
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
+API_URL = _config("TEAMPULSE_API_URL", "http://127.0.0.1:8002/api/v1")
+
+# Which panel this Streamlit instance serves: "user" or "admin".
+# One codebase, two deployments — selected via the PANEL flag (env or secret).
+# (The Community panel was retired from active deployment; any other value
+# falls back to the User Panel so a stale PANEL=community never serves.)
+PANEL = _config("PANEL", "user").strip().lower()
+if PANEL not in {"user", "admin"}:
+    PANEL = "user"
+
+PANEL_META = {
+    "user": {"label": "User Panel", "roles": {"employee", "manager"}},
+    "admin": {"label": "Admin Panel", "roles": {"admin"}},
+}
+
+st.set_page_config(page_title=f"TeamPulse {PANEL_META[PANEL]['label']}", page_icon="TP", layout="wide")
 
 
 def session() -> dict[str, Any]:
@@ -68,8 +99,8 @@ def require_login() -> bool:
 
 
 def login_page() -> None:
-    st.title("TeamPulse")
-    st.caption("Free Streamlit admin panel with Supabase Auth")
+    st.title(f"TeamPulse · {PANEL_META[PANEL]['label']}")
+    st.caption("Sign in with your Supabase Auth credentials")
 
     login_tab, reset_tab, verify_tab = st.tabs(["Login", "Password Reset", "Email Verification"])
 
@@ -119,16 +150,10 @@ def logout() -> None:
     st.rerun()
 
 
-def page_shell() -> str:
-    current_user = user()
-    st.sidebar.markdown("### TeamPulse")
-    st.sidebar.caption(f"{current_user.get('full_name', 'User')} · {current_user.get('role', '').title()}")
-    if st.sidebar.button("Logout", use_container_width=True):
-        logout()
-
-    role = current_user["role"]
-    if role == "admin":
-        pages = [
+def panel_pages(role: str) -> list[str]:
+    """Pages available for the given role within the current PANEL."""
+    if PANEL == "admin":
+        return [
             "Reports Summary",
             "User Management",
             "Department Management",
@@ -137,11 +162,31 @@ def page_shell() -> str:
             "All Leave Requests",
             "Audit Logs",
         ]
-    elif role == "manager":
-        pages = ["Team Leave Requests", "Team Members", "Team Leave Calendar"]
-    else:
-        pages = ["Apply Leave", "Leave Balance", "Leave History", "Notifications", "AI Assistant"]
+    # PANEL == "user": employee + manager self-service pages.
+    if role == "manager":
+        return ["Team Leave Requests", "Team Members", "Team Leave Calendar", "Team Trend Insights"]
+    return ["Apply Leave", "Leave Balance", "Leave History", "Notifications", "AI Assistant"]
 
+
+def page_shell() -> str | None:
+    current_user = user()
+    role = current_user.get("role", "")
+    label = PANEL_META[PANEL]["label"]
+
+    st.sidebar.markdown(f"### TeamPulse · {label}")
+    st.sidebar.caption(f"{current_user.get('full_name', 'User')} · {role.title()}")
+    if st.sidebar.button("Logout", use_container_width=True):
+        logout()
+
+    # Enforce panel access by role. A user with the wrong role for this panel is
+    # authenticated but not authorized here (the backend enforces this too).
+    if role not in PANEL_META[PANEL]["roles"]:
+        allowed = ", ".join(sorted(PANEL_META[PANEL]["roles"]))
+        st.error(f"Your role ({role or 'unknown'}) cannot access the {label}.")
+        st.info(f"This panel is for: {allowed}. Use the panel that matches your role.")
+        return None
+
+    pages = panel_pages(role)
     return st.sidebar.radio("Dashboard", pages, label_visibility="collapsed")
 
 
@@ -565,11 +610,22 @@ def employee_ai_assistant() -> None:
             st.error(str(exc))
 
 
+def manager_trend_insights() -> None:
+    st.header("Team Trend Insights")
+    st.info("🚧 Coming Soon")
+    st.write(
+        "AI-assisted team leave trend insights (seasonality, approval patterns, coverage "
+        "risk) are planned. Until then, use Team Leave Requests and the Team Leave Calendar."
+    )
+
+
 def main() -> None:
     if not require_login():
         return
 
     page = page_shell()
+    if page is None:
+        return
     try:
         if page == "Reports Summary":
             admin_reports()
@@ -601,6 +657,8 @@ def main() -> None:
             employee_notifications()
         elif page == "AI Assistant":
             employee_ai_assistant()
+        elif page == "Team Trend Insights":
+            manager_trend_insights()
     except RuntimeError as exc:
         st.error(str(exc))
 

@@ -264,20 +264,25 @@ git push -u origin main
 
 ## Deployment Notes
 
-Recommended free/low-cost deployment:
+Recommended production stack:
 
-- Supabase for PostgreSQL and Auth
-- Render or Railway for FastAPI
-- Streamlit Community Cloud or Render for the Streamlit frontend
+- **Supabase** for PostgreSQL and Auth
+- **Railway** for the FastAPI backend
+- **Streamlit Community Cloud** for the two Streamlit panels (User + Admin)
 
 Production requirements:
 
 - Set all production environment variables in the hosting provider.
-- Configure CORS for the deployed Streamlit URL.
-- Keep Supabase service-role keys server-only.
-- Verify `GET /api/v1/health` after deploy.
+- Configure backend CORS via `ALLOWED_ORIGINS` (comma-separated Streamlit URLs).
+- Keep Supabase service-role keys server-only (Railway, never Streamlit).
+- Use the Railway backend URL as `TEAMPULSE_API_URL` for both Streamlit panels.
+- Verify `GET /api/v1/health` and `/docs` after deploy.
 - Test Admin, Manager, and Employee login flows after deploy.
 
-Detailed deployment guide: [docs/deployment.md](docs/deployment.md)
+**Production deployment guide (Railway + Streamlit Cloud + Supabase):**
+[docs/railway-streamlit-deployment.md](docs/railway-streamlit-deployment.md) — step-by-step
+backend/panel setup, the exact environment-variable list, and the final production checklist.
+
+General/legacy deployment notes: [docs/deployment.md](docs/deployment.md)
 
 Production checklist: [docs/production-checklist.md](docs/production-checklist.md)
