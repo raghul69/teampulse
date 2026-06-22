@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Python compile check
+        run: |
+          python -m compileall backend frontend alembic
+
+      - name: FastAPI import check
+        env:
+          DATABASE_URL: postgresql+psycopg://localhost:5432/teampulse
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
+        run: |
+          python -c "from backend.main import app; print(app.title); print(len(app.routes))"
+
+      - name: Run tests if present
+        shell: bash
+        run: |
+          if [ -d tests ] || find . -maxdepth 3 -name 'test_*.py' | grep -q .; then
+            python -m pip install pytest
+            python -m pytest
+          else
+            echo "No tests found; skipping pytest."
+          fi

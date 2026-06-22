@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     DATABASE_URL: str = Field(
-        default="postgresql+psycopg://teampulse:teampulse@localhost:5432/teampulse"
+        default="postgresql+psycopg://localhost:5432/teampulse"
     )
 
     SUPABASE_URL: str = Field(default="https://your-project-ref.supabase.co")

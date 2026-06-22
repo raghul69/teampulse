@@ -1,48 +1,60 @@
 # TeamPulse Leave Management System
 
-AI-powered employee leave management starter project using FastAPI, Streamlit, and PostgreSQL.
+TeamPulse is a leave management system built with a free, simple stack:
+
+- FastAPI backend
+- Streamlit frontend/admin panel
+- Supabase Auth
+- Supabase PostgreSQL
+- SQLAlchemy + Alembic
+
+Authentication is handled by Supabase Auth. TeamPulse roles and profile data are stored in `public.users`, mapped to Supabase `auth.users` through `public.users.auth_user_id`. The application does not use custom JWT/password authentication and does not use paid admin panel tools.
 
 ## Features
 
-- Role based login: Employee, Manager, Admin
-- Employee dashboard with leave balance, leave application, status, and history
-- Manager dashboard with team requests, approve/reject actions, conflict checks, and team analytics
-- Admin dashboard with user overview, balances, leave requests, and reports
-- SQLite database with seeded demo users
-- Smart suggestions for leave type, balance warnings, workload conflict detection, and reporting insights
+- Supabase email/password login
+- Supabase session refresh through refresh tokens
+- Role-based dashboards for Admin, Manager, and Employee
+- Admin user, department, leave balance, leave request, audit log, and report pages
+- Manager team request approval/rejection, conflict warnings, team members, and team calendar
+- Employee leave application, balance, history/status, and notifications
+- FastAPI API docs through OpenAPI
+
+## Tech Stack
+
+```text
+Backend:   FastAPI, SQLAlchemy, Alembic, PyJWT, httpx
+Frontend:  Streamlit
+Auth:      Supabase Auth
+Database:  Supabase PostgreSQL
+CI:        GitHub Actions
+```
 
 ## Project Structure
 
 ```text
 backend/
-  main.py                    FastAPI compatibility entrypoint
+  main.py
   app/
-    main.py                  App factory
-    api/
-      deps.py                Dependency injection for DB, auth, RBAC
-      v1/
-        router.py            API v1 router composition
-        routes/              Route modules by domain
-    core/
-      config.py              Environment settings
-      enums.py               Shared domain enums
-      exceptions.py          Global error strategy
-      security.py            Supabase JWT validation helpers
-    db/
-      session.py             SQLAlchemy engine/session
-      base.py                Alembic model metadata import
-    models/                  SQLAlchemy models
-    schemas/                 Pydantic request/response schemas
-    services/                Business logic layer
-alembic/
-  env.py                     Migration environment
-  versions/                  Generated migrations
+    api/                  FastAPI routes and dependencies
+    core/                 settings, enums, exceptions, Supabase JWT validation
+    db/                   SQLAlchemy session and metadata
+    middleware/           Supabase auth middleware
+    models/               SQLAlchemy models
+    schemas/              Pydantic schemas
+    services/             business logic
 frontend/
-  streamlit_app.py
-requirements.txt
+  streamlit_app.py        Streamlit role-based admin panel
+docs/
+  supabase-auth-schema.sql
+  production-checklist.md
+  deployment.md
+alembic/
+  env.py
+  versions/
 ```
 
-## Setup
+## Local Setup
 
 ```powershell
 python -m venv .venv
@@ -51,59 +63,146 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY`.
-Use `SUPABASE_SERVICE_ROLE_KEY` only on trusted backend servers; never expose it to Streamlit or browser clients.
+Edit `.env` with your real Supabase and database values. Keep `.env` private; it is ignored by git.
 
-## Supabase Auth
+## Required Environment Values
 
-TeamPulse uses Supabase Auth for email/password login, email verification, password reset, logout, and session refresh.
-The local `public.users` table stores application profile and authorization data and maps to `auth.users` through `users.auth_user_id`.
-Roles are loaded from `public.users.role`, not from user-editable metadata.
-
-Useful backend auth endpoints:
-
-```text
-POST /api/v1/auth/signup
-POST /api/v1/auth/login
-POST /api/v1/auth/refresh
-POST /api/v1/auth/password-reset
-POST /api/v1/auth/resend-verification
-POST /api/v1/auth/logout
-GET  /api/v1/users/me
+```env
+PROJECT_NAME="TeamPulse Leave Management API"
+API_VERSION="1.0.0"
+API_V1_PREFIX="/api/v1"
+DATABASE_URL="postgresql+psycopg://<db-user>:<db-password>@<db-host>:5432/<db-name>"
+SUPABASE_URL="https://your-project-ref.supabase.co"
+SUPABASE_PUBLISHABLE_KEY="sb_publishable_replace_me"
+SUPABASE_SERVICE_ROLE_KEY=""
+SUPABASE_JWT_AUDIENCE="authenticated"
+SUPABASE_AUTH_VERIFY_TIMEOUT_SECONDS=5
+REQUIRE_EMAIL_VERIFICATION=true
 ```
 
-Schema and RLS starter SQL: `docs/supabase-auth-schema.sql`
+Use `SUPABASE_SERVICE_ROLE_KEY` only on trusted backend servers if a future feature needs it. Never expose a service-role key to Streamlit clients, browsers, or public repositories.
 
-## Database Migrations
+## Supabase Setup
 
-```powershell
-alembic revision --autogenerate -m "initial schema"
-alembic upgrade head
+1. Create a Supabase project.
+2. Enable Email provider in Supabase Auth.
+3. Configure email confirmation and password reset redirect URLs.
+4. Copy your Supabase project URL into `SUPABASE_URL`.
+5. Copy your publishable key into `SUPABASE_PUBLISHABLE_KEY`.
+6. Copy the Supabase PostgreSQL connection string into `DATABASE_URL`.
+7. Run the starter schema and RLS SQL in [docs/supabase-auth-schema.sql](docs/supabase-auth-schema.sql).
+8. Create Supabase Auth users for Admin, Manager, and Employee accounts.
+9. Insert matching rows in `public.users` and set `auth_user_id` to each Supabase `auth.users.id`.
+
+Roles must come from `public.users.role`, not from user-editable metadata.
+
+## First Admin Setup
+
+After creating the first Supabase Auth admin user, insert or update a matching TeamPulse profile:
+
+```sql
+insert into public.users (auth_user_id, full_name, email, role, is_active)
+values (
+  '<supabase-auth-user-id>',
+  'TeamPulse Admin',
+  'admin@example.com',
+  'admin',
+  true
+);
 ```
+
+Then sign in from the Streamlit panel with that Supabase Auth email/password.
 
 ## Run Backend
 
 ```powershell
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --host 127.0.0.1 --port 8002 --reload
 ```
 
-Backend API: `http://127.0.0.1:8000`
+Backend health:
 
-OpenAPI docs: `http://127.0.0.1:8000/docs`
+```text
+http://127.0.0.1:8002/api/v1/health
+```
 
-## Run Frontend
+API docs:
+
+```text
+http://127.0.0.1:8002/docs
+```
+
+## Run Streamlit Admin Panel
 
 Open a second terminal:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-streamlit run frontend/streamlit_app.py
+$env:TEAMPULSE_API_URL="http://127.0.0.1:8002/api/v1"
+streamlit run frontend/streamlit_app.py --server.address 127.0.0.1 --server.port 8503
 ```
 
-## Demo Logins
+Frontend/admin panel:
 
-Create users through Supabase Auth, then ensure `public.users.auth_user_id` maps each Supabase user to a TeamPulse role.
+```text
+http://127.0.0.1:8503
+```
 
-## Notes
+## GitHub Push Steps
 
-This starter uses rule-based AI helpers so it works locally without paid API keys. The `backend/ai.py` module is intentionally isolated so a real LLM or ML model can be added later.
+This repository is already initialized locally with an initial commit on `main`.
+
+Install GitHub CLI on Windows:
+
+```powershell
+winget install GitHub.cli
+```
+
+Log in:
+
+```powershell
+gh auth login
+```
+
+Create and push a private GitHub repository:
+
+```powershell
+gh repo create teampulse --private --source . --remote origin --push
+```
+
+Create and push a public GitHub repository:
+
+```powershell
+gh repo create teampulse --public --source . --remote origin --push
+```
+
+Manual GitHub website method:
+
+1. Go to `https://github.com/new`.
+2. Create an empty repository named `teampulse`.
+3. Do not initialize it with a README, license, or `.gitignore`.
+4. Run:
+
+```powershell
+git remote add origin <repo-url>
+git push -u origin main
+```
+
+## Deployment Notes
+
+Recommended free/low-cost deployment:
+
+- Supabase for PostgreSQL and Auth
+- Render or Railway for FastAPI
+- Streamlit Community Cloud or Render for the Streamlit frontend
+
+Production requirements:
+
+- Set all production environment variables in the hosting provider.
+- Configure CORS for the deployed Streamlit URL.
+- Keep Supabase service-role keys server-only.
+- Verify `GET /api/v1/health` after deploy.
+- Test Admin, Manager, and Employee login flows after deploy.
+
+Detailed deployment guide: [docs/deployment.md](docs/deployment.md)
+
+Production checklist: [docs/production-checklist.md](docs/production-checklist.md)
