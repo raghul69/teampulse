@@ -16,10 +16,12 @@ Set these for the FastAPI backend:
 PROJECT_NAME="TeamPulse Leave Management API"
 API_VERSION="1.0.0"
 API_V1_PREFIX="/api/v1"
-DATABASE_URL="postgresql+psycopg://<db-user>:<db-password>@<db-host>:5432/<db-name>"
 SUPABASE_URL="https://your-project-ref.supabase.co"
 SUPABASE_PUBLISHABLE_KEY="sb_publishable_replace_me"
+NEXT_PUBLIC_SUPABASE_URL="https://your-project-ref.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_replace_me"
 SUPABASE_SERVICE_ROLE_KEY=""
+DATABASE_URL="postgresql+psycopg://<db-user>:<db-password>@<db-host>:5432/<db-name>"
 SUPABASE_JWT_AUDIENCE="authenticated"
 SUPABASE_AUTH_VERIFY_TIMEOUT_SECONDS=5
 REQUIRE_EMAIL_VERIFICATION=true
@@ -36,7 +38,7 @@ TEAMPULSE_API_URL="https://your-backend-domain.example.com/api/v1"
 1. Create a Supabase project.
 2. Enable Email provider under Authentication.
 3. Configure Site URL and Redirect URLs for your Streamlit domain.
-4. Run `docs/supabase-auth-schema.sql` in the Supabase SQL editor.
+4. Run `npx supabase db push` to apply migrations from `supabase/migrations/`.
 5. Create Auth users.
 6. Map each Auth user to `public.users.auth_user_id`.
 7. Confirm roles in `public.users.role`.

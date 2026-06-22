@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     SUPABASE_URL: str = Field(default="https://your-project-ref.supabase.co")
     SUPABASE_PUBLISHABLE_KEY: str = Field(default="sb_publishable_replace_me")
+    NEXT_PUBLIC_SUPABASE_URL: str | None = None
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: str | None = None
     SUPABASE_SERVICE_ROLE_KEY: str | None = Field(default=None)
     SUPABASE_JWT_AUDIENCE: str = Field(default="authenticated")
     SUPABASE_AUTH_VERIFY_TIMEOUT_SECONDS: int = 5

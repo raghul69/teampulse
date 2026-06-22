@@ -10,8 +10,11 @@ Use this checklist before pushing to production.
 - [ ] Password reset redirect URL configured
 - [ ] `SUPABASE_URL` added to backend environment
 - [ ] `SUPABASE_PUBLISHABLE_KEY` added to backend environment
+- [ ] `NEXT_PUBLIC_SUPABASE_URL` placeholder/client value configured if needed
+- [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY` placeholder/client value configured if needed
 - [ ] `DATABASE_URL` added to backend environment
-- [ ] `docs/supabase-auth-schema.sql` run
+- [ ] Supabase CLI project linked
+- [ ] Supabase migrations pushed with `npx supabase db push`
 - [ ] Row Level Security enabled on exposed public tables
 - [ ] Supabase Auth users created
 - [ ] `public.users.auth_user_id` mapping completed

@@ -71,10 +71,12 @@ Edit `.env` with your real Supabase and database values. Keep `.env` private; it
 PROJECT_NAME="TeamPulse Leave Management API"
 API_VERSION="1.0.0"
 API_V1_PREFIX="/api/v1"
-DATABASE_URL="postgresql+psycopg://<db-user>:<db-password>@<db-host>:5432/<db-name>"
 SUPABASE_URL="https://your-project-ref.supabase.co"
 SUPABASE_PUBLISHABLE_KEY="sb_publishable_replace_me"
+NEXT_PUBLIC_SUPABASE_URL="https://your-project-ref.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_replace_me"
 SUPABASE_SERVICE_ROLE_KEY=""
+DATABASE_URL="postgresql+psycopg://<db-user>:<db-password>@<db-host>:5432/<db-name>"
 SUPABASE_JWT_AUDIENCE="authenticated"
 SUPABASE_AUTH_VERIFY_TIMEOUT_SECONDS=5
 REQUIRE_EMAIL_VERIFICATION=true
@@ -90,11 +92,46 @@ Use `SUPABASE_SERVICE_ROLE_KEY` only on trusted backend servers if a future feat
 4. Copy your Supabase project URL into `SUPABASE_URL`.
 5. Copy your publishable key into `SUPABASE_PUBLISHABLE_KEY`.
 6. Copy the Supabase PostgreSQL connection string into `DATABASE_URL`.
-7. Run the starter schema and RLS SQL in [docs/supabase-auth-schema.sql](docs/supabase-auth-schema.sql).
-8. Create Supabase Auth users for Admin, Manager, and Employee accounts.
-9. Insert matching rows in `public.users` and set `auth_user_id` to each Supabase `auth.users.id`.
+7. Link the project with Supabase CLI.
+8. Push migrations to Supabase.
+9. Create Supabase Auth users for Admin, Manager, and Employee accounts.
+10. Insert matching rows in `public.users` and set `auth_user_id` to each Supabase `auth.users.id`.
+
+```powershell
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push
+```
+
+The canonical database schema and RLS policies live in `supabase/migrations/`.
+
+The older [docs/supabase-auth-schema.sql](docs/supabase-auth-schema.sql) file is retained as a readable SQL reference.
 
 Roles must come from `public.users.role`, not from user-editable metadata.
+
+## Auth Flow Status
+
+Implemented:
+
+- Sign up through `POST /api/v1/auth/signup`
+- Login through `POST /api/v1/auth/login`
+- Logout through `POST /api/v1/auth/logout`
+- Session refresh through `POST /api/v1/auth/refresh`
+- Streamlit session persistence with `st.session_state`
+- Protected Admin, Manager, and Employee dashboards
+- Supabase access tokens sent to FastAPI as `Authorization: Bearer <token>`
+
+## Database Tables
+
+TeamPulse currently needs these Supabase PostgreSQL tables:
+
+- `public.users` for TeamPulse profiles, roles, and `auth.users` mapping
+- `public.departments`
+- `public.leave_balances`
+- `public.leave_requests`
+- `public.notifications`
+- `public.audit_logs`
+
+Attendance and task tables are not part of the current leave-management scope.
 
 ## First Admin Setup
 
